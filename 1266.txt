@@ -1,0 +1,9 @@
+# Comments
+id, 1266
+name, Elmstead Cup Qualifier
+date, Fri 25th Mar '16
+url, http://www.colchestergolfclub.com/competition.php?compid=1266&sort=1
+number of players, 68
+oom_points, rank_in_comp, igresult, name - row per player
+        30,           39,       78, Jacob Farson,
+        24,           45,       79, Timothy Logan,
