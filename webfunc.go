@@ -75,7 +75,7 @@ func login() error {
 	}
 
 	client = &http.Client{Jar: jar}
-	u, err := url.Parse("http://www.colchestergolfclub.com/login.php")
+	u, err := url.Parse("https://www.colchestergolfclub.com/login.php")
 	if err != nil {
 		log.Println(err)
 		return err

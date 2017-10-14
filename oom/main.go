@@ -15,6 +15,7 @@ type PlayerOOM struct {
   Name string
   Rank int
   OOMPoints int
+  PointsSlice []int // will be sorted and summed based on MaxComps
   NumCompetitions int
   PlayerByComp map[string]oom.PlayerResult // map keyed on comp key
 }
@@ -28,10 +29,12 @@ type OOM struct {
 
 var theOOM OOM // don't need more than 1
 var flagDetail *bool
+var flagMaxComps *int
 
 func main() {
   flagAll := flag.Bool("all", false, "true for all comps")
   flagYear := flag.Int("year", 0, "default to current year")
+  flagMaxComps = flag.Int("maxComps", 10, "Best (10) Competition scores to count")
   flagDetail = flag.Bool("detail", false, "set to true to output player rank and result additional to oom points")
   flag.Parse()
 
@@ -81,6 +84,7 @@ func populateOOMWithCompetitions() {
       playerOOM, ok := theOOM.OOMResults[name] // can't take address - why?
       if !ok {
         playerOOM.Name = name
+        playerOOM.PointsSlice = []int{}
         playerOOM.PlayerByComp = make(map[string]oom.PlayerResult)
       }
       playerOOM.PlayerByComp[comp.Key] = oom.PlayerResult{
@@ -89,7 +93,9 @@ func populateOOMWithCompetitions() {
         Rank: result.Rank,
         Result: result.Result,
       }
-      playerOOM.OOMPoints += result.OOMPoints
+      playerOOM.OOMPoints += result.OOMPoints // counting every comp
+      // Also keep a slice with all the points for later sort/cap len/sum
+      playerOOM.PointsSlice = append(playerOOM.PointsSlice, result.OOMPoints)
       playerOOM.NumCompetitions ++
       theOOM.OOMResults[name] = playerOOM
     }
@@ -102,8 +108,22 @@ func (l rankSlice) Len() int {return len(l)}
 func (l rankSlice) Less(i int, j int) bool {return l[i].oomPoints < l[j].oomPoints}
 func (l rankSlice) Swap(i int, j int) {l[i], l[j] = l[j], l[i]}
 func calculateOOMRank() {
+  // On entry OOMPoints is the sum of points from all comps - first task
+  // to cap this to the best *flagMaxComps
   var rs rankSlice
   for name, oomRes := range theOOM.OOMResults {
+    sort.Sort(sort.Reverse(sort.IntSlice(oomRes.PointsSlice)))
+    toCount := len(oomRes.PointsSlice)
+    if toCount > *flagMaxComps { toCount = *flagMaxComps }
+    oomRes.OOMPoints = func(s []int) int {
+      tot := 0
+      for _,v := range s {
+        tot += v
+      }
+      return tot
+    } (oomRes.PointsSlice[0:toCount])
+    // oomRes is a copy of the structure - need to overwrite original
+    theOOM.OOMResults[name] = oomRes
     rs = append(rs, rankElem{name, oomRes.OOMPoints})
   }
   sort.Sort(sort.Reverse(rs))
