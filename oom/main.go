@@ -32,6 +32,7 @@ var flagDetail *bool
 var flagMaxComps *int
 
 func main() {
+  log.Println("running ladies version...")
   flagAll := flag.Bool("all", false, "true for all comps")
   flagYear := flag.Int("year", 0, "default to current year")
   flagMaxComps = flag.Int("maxComps", 10, "Best (10) Competition scores to count")

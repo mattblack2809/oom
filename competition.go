@@ -99,10 +99,24 @@ func firstMissingKey(c []Competition, m map[string]Competition) (bool, string) {
 	return missing, missingKey
 }
 
+// 8-jan-2020: modify to read all comps from website for 2018..year
 func FetchCompDescriptions(year int, fname string) []Competition {
   oomCompetitions := parseKeysFromFile(fname) // may also set URL, is a slice
-	d, fromCache := fetchAllCompsPage(year, true) // noting cache may be stale
-  allCompetitions := parseWebComps(string(d)) // may be stale, is a map
+  // ignore year for now - 2018..2020 at present
+	var startYear = 2018
+	var allCompetitions = make(map[string]Competition)
+	var d []byte
+	var fromCache bool
+	for startYear <= year {
+		d, fromCache = fetchAllCompsPage(startYear, true) // noting cache may be stale
+	  yearCompetitions := parseWebComps(string(d)) // may be stale, is a map
+		for k, v := range yearCompetitions {
+			allCompetitions[k] = v
+		}
+		startYear += 1
+	}
+	log.Println("merged comp lists from 2018 ....")
+
 	// check all the comp keys from the file are found in the web page
 	missing, missingKey := firstMissingKey(oomCompetitions, allCompetitions)
 	if missing && !fromCache {
@@ -110,7 +124,7 @@ func FetchCompDescriptions(year int, fname string) []Competition {
 			missingKey)
 	} else {
 		if missing && fromCache {
-			// read from web and try again
+			// read from web and try again - should read all years...
 			d, fromCache = fetchAllCompsPage(year, false)
 			allCompetitions = parseWebComps(string(d))
 			missing, missingKey := firstMissingKey(oomCompetitions, allCompetitions)
@@ -190,7 +204,8 @@ func parseKeysFromFile(fname string) []Competition {
       // put the url in the desc
       s := strings.TrimSpace(strings.Split(scanner.Text(), ",")[1])
       if u, err := url.Parse(s); err == nil {
-        if u.Scheme == "http" {
+//				if u.Scheme == "http" {
+				if u.Scheme == "https" {
           desc.URL = s
         }
       }
@@ -366,22 +381,32 @@ func populateResultsFromWeb(comp *Competition) {
 		if first {
       first = false // scan and discard page up to start of first player result
     } else {
-      numPlayers++
-      var player PlayerResult
-      name, result := detail(scanner.Text())
-      player.Name = name
-      player.Result = result
-      player.Rank = numPlayers
-      res = append(res, player)
+      name, handicap, result := detail(scanner.Text())
+      if(handicap <= 36) {
+        numPlayers++
+        var player PlayerResult
+        player.Name = name
+        player.Result = result
+        player.Rank = numPlayers
+        res = append(res, player)
+      } else {
+        fmt.Println("omitted player as handicap over 36")
+      }
     }
 	}
   comp.NumPlayers = numPlayers
   comp.Results = make(map[string] PlayerResult)
   for n, p := range res {
     p.OOMPoints = numPlayers - n
-    if _, err := strconv.Atoi(p.Result); err != nil {  // DQ, NR...
-      p.OOMPoints = 0
-    }
+		if p.Result != "LEVEL" {
+			n, err := strconv.Atoi(p.Result)
+			if err != nil {  // DQ, NR...
+	      p.OOMPoints = 0
+	    }
+			if err == nil && n == 0 { // example 18 * NR
+				p.OOMPoints = 0
+			}
+		}
     comp.Results[p.Name] = p
   }
 }
@@ -424,12 +449,20 @@ func champSplitFunc(data []byte, atEOF bool) (advance int, token []byte, err err
 //<td><a href="viewround.php?roundid=16413" title="Countback results: Back 9 - 12, Back 6 - 8, Back 3 - 4, Back 1 - 2">24</a></td>
 //<td></td>
 //</tr>
-func playerDetail(s string) (name string, score string) {
+func playerDetail(s string) (name string, handicap_int int, score string) {
     start := strings.Index(s, ">")
     end := strings.Index(s, "</a>")
     name = s[start + 1:end]
 
     s = s[end:]
+    // >Name</a>(16)
+    open_paren := strings.Index(s, "(")
+    close_paren := strings.Index(s, ")")
+    handicap := s[open_paren + 1 : close_paren]
+    handicap_int, _ = strconv.Atoi(handicap)
+    //fmt.Println("playerDetails: ", handicap_int)
+
+
     end = strings.Index(s, "</a></td>")
     s = s[:end]
     start = strings.LastIndex(s, ">")
@@ -437,8 +470,10 @@ func playerDetail(s string) (name string, score string) {
     return
 }
 
-func champDetail(s string) (name string, score string) {
-    start := strings.Index(s, ">")
+func champDetail(s string) (name string, handicap_int int, score string) {
+  handicap_int = 0 // needs fixed!
+  //fmt.Println("champDetails: ", s)
+  start := strings.Index(s, ">")
     end := strings.Index(s, "<") // fragile!!
     end2 := strings.Index(s, "(")
     if end2 != -1 && end2 < end {
